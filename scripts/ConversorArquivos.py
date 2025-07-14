@@ -1,101 +1,96 @@
 #!/usr/bin/env python3
 """
-Zip/Unzip Automatizado com GUI em CustomTkinter
-
-Funcionalidades:
- - Compactar uma pasta em .zip (ignora o próprio ZIP para evitar recursão)
- - Descompactar um .zip em pasta de destino
-
-Uso:
-  python zip_unzip_app.py
-
-UI limpa, com seleção de arquivos/pastas, spinner e log em tempo real
+GUI para conversão de arquivos via Convertio API
 """
 import os
 import threading
-import zipfile
+import time
+import requests
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
 
-# Configura tema CustomTkinter
-ctk.set_appearance_mode("System")  # System, Light, Dark
-ctk.set_default_color_theme("green")  # blue, dark-blue, green
+API_BASE = "https://api.convertio.co"
 
-class ZipUnzipApp(ctk.CTk):
+class ConvertioGUI(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title("Zip/Unzip Automático")
-        self.geometry("600x450")
-        self.minsize(500, 400)
+        self.title("Convertio Converter GUI")
+        self.geometry("600x500")
+        self.resizable(True, True)
+        ctk.set_appearance_mode("System")
+        ctk.set_default_color_theme("dark-blue")
+
+        # Frame principal
         self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(8, weight=1)
+        self.grid_rowconfigure(6, weight=1)
 
-        # Modo: Compactar ou Descompactar
-        ctk.CTkLabel(self, text="Modo:", anchor="w").grid(row=0, column=0, sticky="ew", padx=20, pady=(20,5))
-        self.mode_combo = ctk.CTkComboBox(self, values=["Compactar (Zip)", "Descompactar (Unzip)"], state="readonly")
-        self.mode_combo.set("Compactar (Zip)")
-        self.mode_combo.grid(row=1, column=0, sticky="ew", padx=20)
+        row = 0
+        # API Key
+        ctk.CTkLabel(self, text="API Key:", anchor="w").grid(row=row, column=0, sticky="ew", padx=20, pady=(20,5))
+        self.entry_api = ctk.CTkEntry(self, placeholder_text="Sua API Key Convertio")
+        self.entry_api.grid(row=row+1, column=0, sticky="ew", padx=20)
+        row += 2
 
-        # Input
-        ctk.CTkLabel(self, text="Arquivo/Pasta de entrada:", anchor="w").grid(row=2, column=0, sticky="ew", padx=20, pady=(15,5))
+        # Input file
+        ctk.CTkLabel(self, text="Arquivo de entrada:", anchor="w").grid(row=row, column=0, sticky="ew", padx=20, pady=(10,5))
         frame_in = ctk.CTkFrame(self)
-        frame_in.grid(row=3, column=0, sticky="ew", padx=20)
+        frame_in.grid(row=row+1, column=0, sticky="ew", padx=20)
         frame_in.grid_columnconfigure(0, weight=1)
-        self.entry_input = ctk.CTkEntry(frame_in, placeholder_text="Selecione pasta ou arquivo...")
+        self.entry_input = ctk.CTkEntry(frame_in, placeholder_text="Selecione um arquivo...")
         self.entry_input.grid(row=0, column=0, sticky="ew")
         ctk.CTkButton(frame_in, text="Browse", width=80, command=self.browse_input).grid(row=0, column=1, padx=(10,0))
+        row += 2
 
-        # Output
-        ctk.CTkLabel(self, text="Destino:", anchor="w").grid(row=4, column=0, sticky="ew", padx=20, pady=(15,5))
-        frame_out = ctk.CTkFrame(self)
-        frame_out.grid(row=5, column=0, sticky="ew", padx=20)
-        frame_out.grid_columnconfigure(0, weight=1)
-        self.entry_output = ctk.CTkEntry(frame_out, placeholder_text="Selecione destino (arquivo zip ou pasta)...")
-        self.entry_output.grid(row=0, column=0, sticky="ew")
-        ctk.CTkButton(frame_out, text="Browse", width=80, command=self.browse_output).grid(row=0, column=1, padx=(10,0))
+        # Output format
+        ctk.CTkLabel(self, text="Formato de saída:", anchor="w").grid(row=row, column=0, sticky="ew", padx=20, pady=(10,5))
+        self.combo_format = ctk.CTkComboBox(self, values=["pdf","docx","xlsx","jpg","png","txt","rtf","csv"], state="readonly")
+        self.combo_format.set("pdf")
+        self.combo_format.grid(row=row+1, column=0, sticky="ew", padx=20)
+        row += 2
 
-        # Botões de ação
-        btn_frame = ctk.CTkFrame(self)
-        btn_frame.grid(row=6, column=0, pady=(20,10), padx=20, sticky="ew")
-        btn_frame.grid_columnconfigure((0,1), weight=1)
-        self.btn_execute = ctk.CTkButton(btn_frame, text="Executar", command=self.start_process)
-        self.btn_execute.grid(row=0, column=0, padx=(0,10), sticky="ew")
-        self.btn_start = ctk.CTkButton(btn_frame, text="Iniciar", fg_color="#2ECC71", hover_color="#27AE60", command=self.start_process)
-        self.btn_start.grid(row=0, column=1, sticky="ew")
+        # OCR options
+        self.var_ocr = ctk.BooleanVar(value=False)
+        chk = ctk.CTkCheckBox(self, text="Ativar OCR", variable=self.var_ocr, command=self.toggle_ocr)
+        chk.grid(row=row, column=0, sticky="w", padx=20, pady=(10,5))
+        row += 1
+
+        self.frame_ocr = ctk.CTkFrame(self)
+        self.frame_ocr.grid(row=row, column=0, sticky="ew", padx=40, pady=(0,5))
+        self.frame_ocr.grid_columnconfigure(1, weight=1)
+        ctk.CTkLabel(self.frame_ocr, text="Langs:").grid(row=0, column=0, sticky="w")
+        self.entry_langs = ctk.CTkEntry(self.frame_ocr, placeholder_text="eng,bra")
+        self.entry_langs.grid(row=0, column=1, sticky="ew", padx=(5,0))
+        ctk.CTkLabel(self.frame_ocr, text="Páginas:").grid(row=1, column=0, sticky="w", pady=(5,0))
+        self.entry_pages = ctk.CTkEntry(self.frame_ocr, placeholder_text="1-3,5")
+        self.entry_pages.grid(row=1, column=1, sticky="ew", padx=(5,0), pady=(5,0))
+        self.frame_ocr.grid_remove()
+        row += 1
+
+        # Botão converter
+        self.btn_convert = ctk.CTkButton(self, text="Converter", command=self.start_conversion)
+        self.btn_convert.grid(row=row, column=0, pady=(15,5), padx=20)
+        row += 1
 
         # Spinner
-        self.spinner_label = ctk.CTkLabel(self, text="", font=ctk.CTkFont(size=24))
-        self.spinner_label.grid(row=7, column=0, pady=(0,10))
-        self._running = False
-        self._spinner_chars = ["⏳","🔄","💫","🔃"]
-        self._spin_idx = 0
+        self.lbl_spinner = ctk.CTkLabel(self, text="", font=ctk.CTkFont(size=20))
+        self.lbl_spinner.grid(row=row, column=0, pady=(5,10))
+        row += 1
 
         # Log
         self.logbox = ctk.CTkTextbox(self, state="disabled", wrap="word")
-        self.logbox.grid(row=8, column=0, sticky="nsew", padx=20, pady=(0,20))
+        self.logbox.grid(row=row, column=0, sticky="nsew", padx=20, pady=(0,20))
+
+        self.spinner_chars = ["⏳","🔄","💫","🔃"]
+        self.spin_idx = 0
+        self._running = False
+
+    def toggle_ocr(self):
+        if self.var_ocr.get(): self.frame_ocr.grid()
+        else: self.frame_ocr.grid_remove()
 
     def browse_input(self):
-        mode = self.mode_combo.get()
-        if mode.startswith("Compactar"):
-            sel = filedialog.askdirectory(title="Selecione Pasta para Compactar")
-        else:
-            sel = filedialog.askopenfilename(title="Selecione Arquivo ZIP", filetypes=[("ZIP files","*.zip")])
-        if sel:
-            self.entry_input.delete(0, ctk.END)
-            self.entry_input.insert(0, sel)
-
-    def browse_output(self):
-        mode = self.mode_combo.get()
-        if mode.startswith("Compactar"):
-            path = filedialog.asksaveasfilename(defaultextension=".zip", filetypes=[("ZIP files","*.zip")], title="Salvar arquivo ZIP como")
-            if path:
-                self.entry_output.delete(0, ctk.END)
-                self.entry_output.insert(0, path)
-        else:
-            folder = filedialog.askdirectory(title="Selecione pasta de destino para extrair")
-            if folder:
-                self.entry_output.delete(0, ctk.END)
-                self.entry_output.insert(0, folder)
+        p = filedialog.askopenfilename()
+        if p: self.entry_input.delete(0, ctk.END); self.entry_input.insert(0, p)
 
     def log(self, msg):
         self.logbox.configure(state="normal")
@@ -104,61 +99,72 @@ class ZipUnzipApp(ctk.CTk):
         self.logbox.configure(state="disabled")
 
     def animate(self):
-        if not self._running:
-            self.spinner_label.configure(text="")
-            return
-        self.spinner_label.configure(text=self._spinner_chars[self._spin_idx % len(self._spinner_chars)])
-        self._spin_idx += 1
+        if not self._running: return
+        self.lbl_spinner.configure(text=self.spinner_chars[self.spin_idx % len(self.spinner_chars)])
+        self.spin_idx += 1
         self.after(150, self.animate)
 
-    def start_process(self):
-        inp = self.entry_input.get().strip()
-        out = self.entry_output.get().strip()
-        mode = self.mode_combo.get()
-        if not inp or not out:
-            messagebox.showwarning("Dados incompletos", "Preencha entrada e destino!")
+    def start_conversion(self):
+        apikey = self.entry_api.get().strip()
+        infile = self.entry_input.get().strip()
+        outfmt = self.combo_format.get()
+        if not apikey or not infile or not outfmt:
+            messagebox.showwarning("Faltando dados", "Preencha API Key, input e formato!")
             return
-        # Verifica que o ZIP de saída não esteja dentro do diretório de entrada
-        if mode.startswith("Compactar"):
-            inp_abs = os.path.abspath(inp)
-            out_abs = os.path.abspath(out)
-            if os.path.commonpath([out_abs, inp_abs]) == inp_abs:
-                messagebox.showerror("Erro", "O arquivo ZIP de saída não pode estar dentro da pasta de entrada.")
-                return
-        self.btn_execute.configure(state="disabled")
-        self.btn_start.configure(state="disabled")
+        if not os.path.isfile(infile):
+            messagebox.showerror("Erro", "Arquivo de entrada não encontrado.")
+            return
+        self.btn_convert.configure(state="disabled")
         self.logbox.configure(state="normal"); self.logbox.delete('0.0', ctk.END); self.logbox.configure(state="disabled")
         self._running = True
         self.animate()
-        threading.Thread(target=self._process_thread, args=(mode, inp, out), daemon=True).start()
+        threading.Thread(target=self._convert_thread, args=(apikey, infile, outfmt), daemon=True).start()
 
-    def _process_thread(self, mode, inp, out):
+    def _convert_thread(self, apikey, infile, outfmt):
         try:
-            if mode.startswith("Compactar"):
-                self.log(f"Compactando '{inp}' em '{out}'...")
-                out_abs = os.path.abspath(out)
-                with zipfile.ZipFile(out_abs, 'w', zipfile.ZIP_DEFLATED) as zf:
-                    for root, dirs, files in os.walk(inp):
-                        for file in files:
-                            abs_path = os.path.abspath(os.path.join(root, file))
-                            # ignora o próprio ZIP para evitar loop infinito
-                            if abs_path == out_abs:
-                                continue
-                            rel_path = os.path.relpath(abs_path, inp)
-                            zf.write(abs_path, rel_path)
-                self.log("Compactação concluída!")
-            else:
-                self.log(f"Descompactando '{inp}' em '{out}'...")
-                with zipfile.ZipFile(inp, 'r') as zf:
-                    zf.extractall(out)
-                self.log("Descompactação concluída!")
+            # iniciar
+            self.log("Iniciando conversão...")
+            data = {"apikey":apikey, "input":"upload","outputformat":outfmt}
+            if self.var_ocr.get():
+                opts={"ocr_enabled":True, "ocr_settings":{}}
+                langs=self.entry_langs.get().strip()
+                pages=self.entry_pages.get().strip()
+                if langs: opts['ocr_settings']['langs']=langs.split(',')
+                if pages: opts['ocr_settings']['page_nums']=pages
+                data['options']=opts
+            r = requests.post(f"{API_BASE}/convert", json=data)
+            r.raise_for_status(); js=r.json()
+            cid = js['data']['id'] if js.get('status')=='ok' else (_ for _ in ()).throw(Exception(js.get('error')))
+            self.log(f"Conversion ID: {cid}")
+            # upload
+            fname=os.path.basename(infile)
+            with open(infile,'rb') as f:
+                up=requests.put(f"{API_BASE}/convert/{cid}/{fname}", data=f)
+            up.raise_for_status(); self.log("Arquivo enviado...")
+            # polling
+            while True:
+                s=requests.get(f"{API_BASE}/convert/{cid}/status", params={"apikey":apikey})
+                s.raise_for_status(); st=s.json()['data']
+                step=st['step']; pct=st.get('step_percent',0)
+                self.log(f"[{step}] {pct}%")
+                if step=='finish': break
+                if step=='failed': raise Exception("Conversão falhou.")
+                time.sleep(1)
+            # download via URL
+            url=st['output']['url']
+            outpath=os.path.splitext(infile)[0]+f"_conv.{outfmt}"
+            self.log(f"Baixando para {outpath}...")
+            dl=requests.get(url, stream=True); dl.raise_for_status()
+            with open(outpath,'wb') as f:
+                for chunk in dl.iter_content(8192): f.write(chunk)
+            self.log("Concluído com sucesso!")
         except Exception as e:
             self.log(f"❌ Erro: {e}")
         finally:
-            self._running = False
-            self.btn_execute.configure(state="normal")
-            self.btn_start.configure(state="normal")
+            self._running=False
+            self.btn_convert.configure(state="normal")
+            self.lbl_spinner.configure(text="")
 
 if __name__ == '__main__':
-    app = ZipUnzipApp()
+    app = ConvertioGUI()
     app.mainloop()
