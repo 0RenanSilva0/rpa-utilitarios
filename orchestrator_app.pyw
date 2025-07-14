@@ -13,7 +13,7 @@ ctk.set_appearance_mode("System")  # System, Light, Dark
 ctk.set_default_color_theme("dark-blue")  # blue, dark-blue, green
 
 # Credenciais (altere conforme necessário)
-VALID_CREDENTIALS = {"admin": "password123"}
+VALID_CREDENTIALS = {"Renan": "senha"}
 
 # Diretório de scripts e arquivo de configuração
 SCRIPTS_DIR = os.path.join(os.getcwd(), "scripts")
