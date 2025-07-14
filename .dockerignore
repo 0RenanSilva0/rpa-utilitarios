@@ -1,0 +1,64 @@
+
+# Ignore o ambiente virtual
+venv/
+.venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+
+# Ignore arquivos Python compilados
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Ignore arquivos de log
+*.log
+logs/
+
+# Ignore arquivos e diretórios de testes
+tests/
+.pytest_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+
+                
+# Ignore dependências temporárias
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Ignore cache e lixo
+*.DS_Store
+*.swp
+*.bak
+*.tmp
+
+# Ignore documentação gerada
+docs/_build/
+
+# Ignore arquivos de IDEs
+.idea/
+.vscode/
+*.code-workspace
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+
+# Arquivos de controle de versionamento que não devem ir pro container
+.git/
+.gitignore
+.dockerignore
+    
